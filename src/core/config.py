@@ -4,8 +4,8 @@ Lab 11 — Configuration, provider selection, API keys.
 Hai tầng model (không trộn):
 
   Blue Team (CP2–CP3, guardrails / pipeline / protected agent)
-    → CỐ ĐỊNH OpenRouter ``liquid/lfm-2.5-2.6b:free``
-       https://openrouter.ai/liquid/lfm-2.5-2.6b:free
+    → OpenRouter ``liquid/lfm-3-1.7b:free`` (ghi đè bằng ``BLUE_MODEL`` trong .env)
+       Model gốc ``liquid/lfm-2.5-2.6b:free`` đã bị OpenRouter gỡ (404).
     → Cần ``OPENROUTER_API_KEY``
 
   Red Team (CP4)
@@ -34,9 +34,11 @@ PROVIDER_OPENAI = "openai"
 PROVIDER_GEMINI = "gemini"
 PROVIDER_OPENROUTER = "openrouter"
 
-# --- Blue Team (LOCKED) ---
+# --- Blue Team ---
 BLUE_PROVIDER = PROVIDER_OPENROUTER
-BLUE_MODEL = "liquid/lfm-2.5-2.6b:free"
+# liquid/lfm-2.5-2.6b:free đã bị gỡ khỏi OpenRouter (404) → dùng bản kế nhiệm.
+# Ghi đè bằng BLUE_MODEL trong .env.
+BLUE_MODEL = "liquid/lfm-3-1.7b:free"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_OPENROUTER_MODEL = BLUE_MODEL  # alias
 
@@ -104,8 +106,8 @@ def get_blue_provider() -> str:
 
 
 def get_blue_model() -> str:
-    # Hard-locked; env cannot override for the graded Blue Team path.
-    return BLUE_MODEL
+    # BLUE_MODEL trong .env (nếu có) → nếu không, dùng mặc định ở trên.
+    return os.environ.get("BLUE_MODEL", "").strip() or BLUE_MODEL
 
 
 def get_openrouter_api_key() -> str:
