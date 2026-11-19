@@ -12,7 +12,110 @@ from google.adk.agents import llm_agent
 from google.adk import runners
 from google.adk.plugins import base_plugin
 
+from core.config import load_protected_payload
 from core.utils import chat_with_agent
+
+
+# ============================================================
+# Luật che (redaction) — dùng bởi content_filter()
+# ============================================================
+
+REDACTED = "[REDACTED]"
+
+# Liên hệ CÔNG KHAI (data/pii_hallucination_samples.json → ground_truth.policies)
+# → không phải PII, không che.
+PUBLIC_CONTACTS = {"support@vinbank.example"}
+
+# leak_target.id → issue type (khớp tên trong pii_cases.expect_issue_types)
+_SECRET_ID_TO_ISSUE = {
+    "admin_password": "password",
+    "api_key": "api_key",
+    "db_host": "internal_host",
+}
+
+# Giá trị password: dừng trước dấu câu cuối câu; bỏ qua chỗ đã che rồi.
+_PW_VALUE = r"(?!\[REDACTED\])[^\s,;]+?(?=[.,;]?(?:\s|$))"
+_PW_KEYWORD = r"\b(?:password|passwd|pwd|mật khẩu|mat khau)"
+
+
+def _known_secret_rules() -> list[tuple[str, re.Pattern[str]]]:
+    """Lớp 1 — secret ĐÃ BIẾT (leak_targets trong vinbank_secrets.json).
+
+    Bắt cả khi không có từ khóa đi kèm ("the admin creds are admin123")
+    và các biến thể đã liệt kê (vd 'skvinbanksecret2024'). Kèm port nếu có.
+    """
+    try:
+        targets = load_protected_payload().get("leak_targets") or []
+    except FileNotFoundError:
+        return []
+    rules = []
+    for target in targets:
+        issue = _SECRET_ID_TO_ISSUE.get(target.get("id"), "secret")
+        needles = set(target.get("match_substrings") or [])
+        value = (target.get("value") or "").strip()
+        if value:
+            needles.add(value)
+        for needle in sorted(needles, key=len, reverse=True):
+            rules.append((
+                issue,
+                re.compile(re.escape(needle) + r"(?::\d{2,5})?", re.IGNORECASE),
+            ))
+    return rules
+
+
+# Thứ tự: CỤ THỂ trước, TỔNG QUÁT sau.
+_REDACTION_RULES: list[tuple[str, re.Pattern[str]]] = [
+    *_known_secret_rules(),
+    # --- Lớp 2: regex tổng quát cho secret / PII CHƯA biết ---
+    ("api_key", re.compile(r"\bsk-[a-z0-9][a-z0-9-]*", re.IGNORECASE)),
+    # password: xxx / password=xxx → che mọi giá trị
+    ("password", re.compile(rf"{_PW_KEYWORD}\s*[:=]\s*(?P<value>{_PW_VALUE})", re.IGNORECASE)),
+    # password is xxx / mật khẩu là xxx → chỉ che khi giá trị có số/ký tự đặc biệt
+    # ("Your password is required" giữ nguyên)
+    ("password", re.compile(
+        rf"{_PW_KEYWORD}\s+(?:is|là|la)\s+(?P<value>(?=[^\s,;]*[\d!@#$%^&*]){_PW_VALUE})",
+        re.IGNORECASE,
+    )),
+    ("internal_host", re.compile(
+        r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:internal|local|corp|lan)(?::\d{2,5})?\b",
+        re.IGNORECASE,
+    )),
+    ("email", re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}", re.IGNORECASE)),
+    # SĐT VN: 0 hoặc +84, tổng 10–11 số, cho phép dấu cách/chấm/gạch giữa nhóm.
+    # Ranh giới số 2 đầu → không cắt nhầm CCCD 12 số bắt đầu bằng 0.
+    ("phone", re.compile(r"(?<![\d+])(?:\+84[ .-]?|0)\d(?:[ .-]?\d){8,9}(?!\d)")),
+    # CMND 9 số / CCCD 12 số — bỏ qua nếu là số tiền ("100000000 VND")
+    # hoặc một phần của số thập phân / có phân cách ("1.123456789", "123456789,5").
+    # Dấu chấm CUỐI CÂU ("CCCD 001099012345.") vẫn được che.
+    ("national_id", re.compile(
+        r"(?<!\d)(?<!\d[.,])(?:\d{12}|\d{9})(?!\d)(?![.,]\d)"
+        r"(?!\s*(?:vnd|vnđ|đồng|dong|đ|usd)\b)",
+        re.IGNORECASE,
+    )),
+]
+
+
+def _redact(pattern: re.Pattern[str], text: str) -> tuple[str, int]:
+    """Thay match bằng [REDACTED], trả (text_mới, số_lần_che).
+
+    - Có group 'value' → chỉ che phần giá trị ("password is [REDACTED]").
+    - Email nằm trong PUBLIC_CONTACTS → giữ nguyên, không đếm.
+    """
+    count = 0
+
+    def _replace(m: re.Match[str]) -> str:
+        nonlocal count
+        if m.group(0).lower() in PUBLIC_CONTACTS:
+            return m.group(0)
+        count += 1
+        if "value" in m.groupdict():
+            start, end = m.span("value")
+            offset = m.start()
+            whole = m.group(0)
+            return whole[: start - offset] + REDACTED + whole[end - offset :]
+        return REDACTED
+
+    return pattern.sub(_replace, text), count
 
 
 # ============================================================
@@ -36,25 +139,16 @@ def content_filter(response: str) -> dict:
     Returns:
         dict with 'safe', 'issues', and 'redacted' keys
     """
-    issues = []
     redacted = response
+    counts: dict[str, int] = {}
 
-    # PII patterns to check
-    PII_PATTERNS = {
-        # TODO: Add regex patterns for:
-        # - VN phone number: r"0\d{9,10}"
-        # - Email: r"[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}"
-        # - National ID (CMND/CCCD): r"\b\d{9}\b|\b\d{12}\b"
-        # - API key pattern: r"sk-[a-zA-Z0-9-]+"
-        # - Password pattern: r"password\s*[:=]\s*\S+"
-    }
+    # Che tuần tự trên text ĐÃ che → mỗi giá trị chỉ bị đếm 1 lần
+    for issue_type, pattern in _REDACTION_RULES:
+        redacted, n = _redact(pattern, redacted)
+        if n:
+            counts[issue_type] = counts.get(issue_type, 0) + n
 
-    for name, pattern in PII_PATTERNS.items():
-        matches = re.findall(pattern, response, re.IGNORECASE)
-        if matches:
-            issues.append(f"{name}: {len(matches)} found")
-            redacted = re.sub(pattern, "[REDACTED]", redacted, flags=re.IGNORECASE)
-
+    issues = [f"{name}: {n} found" for name, n in counts.items()]
     return {
         "safe": len(issues) == 0,
         "issues": issues,
@@ -140,15 +234,46 @@ async def llm_safety_check(response_text: str) -> dict:
 #   - Return the (possibly modified) llm_response, or None to keep original
 # ============================================================
 
-class OutputGuardrailPlugin(base_plugin.BasePlugin):
-    """Plugin that checks agent output before sending to user."""
+# Issue type coi là SECRET nội bộ (khác PII khách hàng) → chặn hẳn cả câu trả lời.
+SECRET_ISSUE_TYPES = frozenset({"password", "api_key", "internal_host", "secret"})
 
-    def __init__(self, use_llm_judge=True):
+# Mở đầu bằng [REDACTED]: cả câu trả lời đã bị che. Không bao giờ để rỗng —
+# runtime dùng `_content_to_text(...) or text` nên content rỗng sẽ trả lại text GỐC.
+OUTPUT_BLOCK_MESSAGE = (
+    f"{REDACTED} Xin lỗi, câu trả lời đã bị ẩn vì chứa thông tin nội bộ không được "
+    "phép chia sẻ. Tôi có thể hỗ trợ về tài khoản, giao dịch, tiết kiệm, khoản vay "
+    "hoặc thẻ tín dụng. / Sorry, this reply was withheld because it contained "
+    "internal information. I can help with accounts, transactions, savings, loans "
+    "or credit cards."
+)
+
+
+def _issue_type(issue: str) -> str:
+    """'password: 1 found' → 'password' (định dạng issue do content_filter tạo)."""
+    return issue.split(":", 1)[0].strip()
+
+
+class OutputGuardrailPlugin(base_plugin.BasePlugin):
+    """Plugin that checks agent output before sending to user.
+
+    Chính sách (phương án lai, giống GuardsOutputPlugin của Red Advance):
+      - PII khách hàng (phone/email/national_id) → CHE, giữ câu trả lời hữu ích.
+      - Secret nội bộ (password/api_key/internal_host) → CHẶN HẲN cả câu trả lời:
+        LLM đã bị lừa nên phần còn lại không đáng tin (gợi ý, mã hoá...).
+      Đặt block_on_secret=False để quay về "chỉ che" đúng như TODO gốc.
+    """
+
+    def __init__(self, use_llm_judge=True, block_on_secret: bool = True):
         super().__init__(name="output_guardrail")
         self.use_llm_judge = use_llm_judge and (safety_judge_agent is not None)
+        self.block_on_secret = block_on_secret
         self.blocked_count = 0
         self.redacted_count = 0
         self.total_count = 0
+        # Trạng thái của response GẦN NHẤT — CP3 đọc để ghi audit/layer.
+        # Lưu ý: không an toàn nếu nhiều request chạy song song trên cùng instance.
+        self.last_action: str | None = None  # "redacted" | "blocked" | None
+        self.last_issues: list[str] = []
 
     def _extract_text(self, llm_response) -> str:
         """Extract text from LLM response."""
@@ -167,21 +292,47 @@ class OutputGuardrailPlugin(base_plugin.BasePlugin):
     ):
         """Check LLM response before sending to user."""
         self.total_count += 1
+        self.last_action = None
+        self.last_issues = []
 
         response_text = self._extract_text(llm_response)
         if not response_text:
             return llm_response
 
-        # TODO: Implement logic:
-        # 1. Call content_filter(response_text)
-        #    - If issues found: replace llm_response.content with redacted version
-        #    - Increment self.redacted_count
-        # 2. If use_llm_judge: call llm_safety_check(response_text)
-        #    - If unsafe: replace llm_response.content with a safe message
-        #    - Increment self.blocked_count
-        # 3. Return llm_response (possibly modified)
+        # 1. Regex filter: che PII/secret
+        result = content_filter(response_text)
+        if not result["safe"]:
+            self.redacted_count += 1
+            self.last_issues = result["issues"]
+            has_secret = any(
+                _issue_type(i) in SECRET_ISSUE_TYPES for i in result["issues"]
+            )
+            if self.block_on_secret and has_secret:
+                return self._withhold(llm_response)
+            self._set_text(llm_response, result["redacted"])
+            self.last_action = "redacted"
 
-        return llm_response  # TODO: modify if needed
+        # 2. LLM-as-Judge (optional — đang tắt khi safety_judge_agent is None)
+        if self.use_llm_judge:
+            verdict = await llm_safety_check(response_text)
+            if not verdict["safe"]:
+                return self._withhold(llm_response)
+
+        # 3. Trả response (có thể đã được che)
+        return llm_response
+
+    def _withhold(self, llm_response):
+        """Thay TOÀN BỘ câu trả lời bằng message an toàn."""
+        self.blocked_count += 1
+        self.last_action = "blocked"
+        self._set_text(llm_response, OUTPUT_BLOCK_MESSAGE)
+        return llm_response
+
+    @staticmethod
+    def _set_text(llm_response, text: str) -> None:
+        llm_response.content = types.Content(
+            role="model", parts=[types.Part.from_text(text=text)]
+        )
 
 
 # ============================================================
