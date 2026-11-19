@@ -1,0 +1,267 @@
+.chat-page { height: 100dvh; overflow: hidden; }
+
+.console {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  height: calc(100dvh - var(--topbar));
+}
+
+/* ---------- Hội thoại ---------- */
+
+.thread {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 48px 24px 24px;
+}
+
+.messages-inner { max-width: 760px; margin: 0 auto; }
+
+.intro h1 {
+  margin: 0 0 16px;
+  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.028em;
+}
+
+.intro > p { max-width: 62ch; margin: 0 0 28px; color: var(--ink-2); }
+
+.intro-warning {
+  padding: 12px 14px;
+  border-left: 3px solid var(--redact);
+  background: var(--redact-wash);
+  color: var(--ink);
+  font-size: 0.9375rem;
+}
+
+.sample-group h2 {
+  margin: 0 0 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+
+.chip {
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: 500 0.875rem/1.4 var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.chip:hover { border-color: var(--ink-3); }
+.chip.is-probe { font-family: var(--mono); font-size: 0.75rem; font-weight: 400; }
+
+/* Một lượt: câu hỏi, dải lớp chắn, câu trả lời */
+
+.turn { padding: 28px 0 30px; border-bottom: 1px solid var(--rule-soft); }
+.turn:first-of-type { padding-top: 0; }
+
+.who { margin: 0 0 6px; font-size: 0.75rem; font-weight: 600; color: var(--ink-3); }
+
+.ask-text {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.turn .trace { margin: 18px 0 20px; }
+
+.answer-body { overflow-wrap: anywhere; }
+.answer-body p { margin: 0 0 10px; }
+.answer-body ul,
+.answer-body ol { margin: 0 0 10px; padding-left: 22px; }
+.answer-body li { margin-bottom: 4px; }
+.answer-body > :last-child { margin-bottom: 0; }
+.answer-h { font-weight: 700; }
+.answer-body.is-waiting { color: var(--ink-3); }
+.answer-body.is-blocked { color: var(--ink-2); }
+.answer-body.is-error { color: var(--error); }
+
+/* ---------- Ô soạn ---------- */
+
+.composer {
+  padding: 14px 24px 14px;
+  border-top: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+.composer-inner {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.composer textarea {
+  flex: 1;
+  min-width: 0;
+  max-height: 200px;
+  padding: 11px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: 400 1rem/1.45 var(--font);
+  resize: none;
+}
+
+.composer textarea::placeholder { color: var(--ink-3); }
+.composer textarea:focus-visible { outline-offset: 0; border-color: var(--focus); }
+
+.composer .btn { height: 46px; padding: 0 22px; }
+
+.composer-note {
+  max-width: 760px;
+  margin: 8px auto 0;
+  font-size: 0.75rem;
+  color: var(--ink-3);
+}
+
+/* ---------- Khung phiên ---------- */
+
+.side {
+  overflow-y: auto;
+  padding: 24px 22px 28px;
+  border-left: 1px solid var(--rule);
+  background: var(--sheet);
+}
+
+.side-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 20px;
+  list-style: none;
+  cursor: default;
+}
+
+.side-summary::-webkit-details-marker { display: none; }
+.side-title { font-size: 1rem; font-weight: 700; }
+.side-brief { display: none; font-size: 0.8125rem; color: var(--ink-3); }
+
+.rate-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.rate-slots {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 3px;
+  margin: 10px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.rate-slots li {
+  height: 22px;
+  border-radius: 2px;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  transition: background-color 200ms ease;
+}
+
+.rate-slots li.is-used { background: var(--ink-2); box-shadow: none; }
+.rate-slots.is-full li { background: var(--stop); }
+
+.rate-note { min-height: 1.4em; margin: 0 0 22px; font-size: 0.8125rem; color: var(--ink-3); }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 16px 0;
+  border-block: 1px solid var(--rule);
+}
+
+.stats dt { font-size: 0.75rem; color: var(--ink-3); }
+.stats dd { margin: 2px 0 0; font-size: 1.375rem; font-weight: 700; line-height: 1.2; }
+.stats dd.is-over { color: var(--stop); }
+
+.alerts { margin: 0 0 24px; font-size: 0.8125rem; color: var(--ink-2); }
+.alerts.has-alert { color: var(--stop); font-weight: 600; }
+
+.journal summary {
+  margin-bottom: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.journal ol { margin: 0 0 20px; padding: 0; list-style: none; }
+
+.journal li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: 0.8125rem;
+}
+
+.j-time { color: var(--ink-3); }
+
+.j-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.j-status { grid-column: 2; font-size: 0.75rem; font-weight: 600; }
+.j-status.is-pass { color: var(--pass); }
+.j-status.is-stop { color: var(--stop); }
+.j-status.is-error { color: var(--error); }
+.j-lat { margin-left: 8px; font-weight: 400; color: var(--ink-3); }
+
+.journal-empty { margin: 4px 0 20px; font-size: 0.8125rem; color: var(--ink-3); }
+
+.side-note { margin: 14px 0 0; font-size: 0.75rem; color: var(--ink-3); }
+
+/* ---------- Màn hẹp ---------- */
+
+@media (max-width: 900px) {
+  .console {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .side {
+    order: -1;
+    max-height: 55dvh;
+    padding: 12px 16px;
+    border-left: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .side-summary { margin-bottom: 0; cursor: pointer; }
+  .side-details[open] .side-summary { margin-bottom: 16px; }
+  .side-brief { display: inline; }
+
+  .messages { padding: 28px 16px 16px; }
+  .composer { padding: 10px 16px 12px; }
+  .trace li { font-size: 0.6875rem; }
+}

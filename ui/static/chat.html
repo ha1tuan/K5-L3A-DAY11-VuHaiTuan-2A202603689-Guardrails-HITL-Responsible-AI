@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hỏi đáp Blue</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="/static/base.css">
+  <link rel="stylesheet" href="/static/chat.css">
+</head>
+<body class="chat-page">
+  <header class="topbar">
+    <a class="brand" href="/">VinBank Guardrails <span>Lab Day 11</span></a>
+    <nav class="topnav" aria-label="Trang">
+      <a href="/">Báo cáo</a>
+      <a href="/chat" aria-current="page">Hỏi đáp</a>
+    </nav>
+  </header>
+
+  <main class="console">
+    <section class="thread" aria-label="Hội thoại">
+      <div class="messages" id="messages">
+        <div class="messages-inner" id="log" aria-live="polite">
+          <div class="intro" id="intro">
+            <h1>Hỏi trợ lý VinBank</h1>
+            <p>
+              Câu hỏi của bạn đi qua đúng các lớp chắn của bài lab rồi mới tới model
+              <span class="verbatim" id="model-name">Blue</span>. Dưới mỗi câu hỏi có một dải
+              bốn ô cho biết lớp nào cho qua, lớp nào chặn hoặc che nội dung.
+            </p>
+            <p class="intro-warning" id="key-warning" hidden>
+              Chưa có OPENROUTER_API_KEY trong .env. Các lớp lọc vẫn chạy, nhưng câu hỏi nào
+              qua được bộ lọc sẽ báo lỗi ở bước model.
+            </p>
+            <div id="samples"></div>
+          </div>
+        </div>
+      </div>
+
+      <form class="composer" id="composer">
+        <div class="composer-inner">
+          <label for="q" class="visually-hidden">Câu hỏi cho trợ lý VinBank</label>
+          <textarea id="q" rows="1" maxlength="8000"
+            placeholder="Hỏi về tài khoản, chuyển tiền, lãi suất, thẻ tín dụng…"></textarea>
+          <button class="btn btn-primary" id="send" type="submit">Gửi</button>
+        </div>
+        <p class="composer-note">
+          Enter để gửi, Shift + Enter để xuống dòng. Mỗi câu được xử lý riêng, Blue không nhớ câu trước.
+        </p>
+      </form>
+    </section>
+
+    <aside class="side" aria-label="Phiên này">
+      <details class="side-details" id="side-details" open>
+        <summary class="side-summary">
+          <span class="side-title">Phiên này</span>
+          <span class="side-brief num" id="side-brief"></span>
+        </summary>
+
+        <div class="rate">
+          <div class="rate-row">
+            <span>Lượt trong cửa sổ</span>
+            <span class="num" id="rate-count">0/10</span>
+          </div>
+          <ol class="rate-slots" id="rate-slots" aria-hidden="true"></ol>
+          <p class="rate-note" id="rate-note"></p>
+        </div>
+
+        <dl class="stats">
+          <div><dt>Yêu cầu</dt><dd class="num" id="st-total">0</dd></div>
+          <div><dt>Bị chặn</dt><dd class="num" id="st-blocked">0</dd></div>
+          <div><dt>Tỉ lệ chặn</dt><dd class="num" id="st-rate">0%</dd></div>
+        </dl>
+        <p class="alerts" id="alerts">Chưa có cảnh báo.</p>
+
+        <details class="journal" id="journal" open>
+          <summary>Nhật ký <span class="num" id="journal-count"></span></summary>
+          <ol id="journal-list"></ol>
+          <p class="journal-empty" id="journal-empty">Chưa có yêu cầu nào trong phiên này.</p>
+        </details>
+
+        <button class="btn" id="reset" type="button">Bắt đầu phiên mới</button>
+        <p class="side-note">
+          Nhật ký phiên chỉ nằm trong bộ nhớ của server. File outputs/audit_log.json của
+          Checkpoint 3 không bị ghi đè.
+        </p>
+      </details>
+    </aside>
+  </main>
+
+  <script type="module" src="/static/chat.js"></script>
+</body>
+</html>
